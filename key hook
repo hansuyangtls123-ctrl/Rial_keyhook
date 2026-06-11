@@ -1,0 +1,164 @@
+-- Rivals Keyhook v3.0 - True Silent Aim (시선 다른데 두고도 맞음)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+if not LocalPlayer then return end
+
+local silentAim = false
+local wallbang = false
+local maxDistance = 8000
+local target = nil
+
+-- UI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 320, 0, 260)
+MainFrame.Position = UDim2.new(0.5, -160, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0,12)
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1,0,0,45)
+Title.BackgroundTransparency = 1
+Title.Text = "Rivals Keyhook v3.0"
+Title.TextColor3 = Color3.fromRGB(0,255,150)
+Title.TextScaled = true
+Title.Font = Enum.Font.GothamBold
+Title.Parent = MainFrame
+
+-- Silent Aim Toggle
+local SilentToggle = Instance.new("TextButton")
+SilentToggle.Size = UDim2.new(0.85,0,0,50)
+SilentToggle.Position = UDim2.new(0.075,0,0.25,0)
+SilentToggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+SilentToggle.Text = "Silent Aim : OFF"
+SilentToggle.TextColor3 = Color3.fromRGB(255,80,80)
+SilentToggle.TextScaled = true
+SilentToggle.Font = Enum.Font.GothamSemibold
+SilentToggle.Parent = MainFrame
+Instance.new("UICorner", SilentToggle).CornerRadius = UDim.new(0,8)
+
+-- Wallbang Toggle
+local WallToggle = Instance.new("TextButton")
+WallToggle.Size = UDim2.new(0.85,0,0,50)
+WallToggle.Position = UDim2.new(0.075,0,0.48,0)
+WallToggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+WallToggle.Text = "Wallbang : OFF"
+WallToggle.TextColor3 = Color3.fromRGB(255,80,80)
+WallToggle.TextScaled = true
+WallToggle.Font = Enum.Font.GothamSemibold
+WallToggle.Parent = MainFrame
+Instance.new("UICorner", WallToggle).CornerRadius = UDim.new(0,8)
+
+local function updateUI()
+    if silentAim then
+        SilentToggle.Text = "Silent Aim : ON"
+        SilentToggle.TextColor3 = Color3.fromRGB(0,255,100)
+        SilentToggle.BackgroundColor3 = Color3.fromRGB(30,70,30)
+    else
+        SilentToggle.Text = "Silent Aim : OFF"
+        SilentToggle.TextColor3 = Color3.fromRGB(255,80,80)
+        SilentToggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    end
+    
+    if wallbang then
+        WallToggle.Text = "Wallbang : ON"
+        WallToggle.TextColor3 = Color3.fromRGB(0,255,100)
+        WallToggle.BackgroundColor3 = Color3.fromRGB(30,70,30)
+    else
+        WallToggle.Text = "Wallbang : OFF"
+        WallToggle.TextColor3 = Color3.fromRGB(255,80,80)
+        WallToggle.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    end
+end
+
+SilentToggle.MouseButton1Click:Connect(function()
+    silentAim = not silentAim
+    updateUI()
+end)
+
+WallToggle.MouseButton1Click:Connect(function()
+    wallbang = not wallbang
+    updateUI()
+end)
+
+-- 드래그
+local dragging, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = MainFrame.Position
+    end
+end)
+MainFrame.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+MainFrame.InputEnded:Connect(function() dragging = false end)
+
+-- 타겟 찾기
+RunService.Heartbeat:Connect(function()
+    if not (silentAim or wallbang) then target = nil return end
+    local closest, dist = nil, math.huge
+    local myPos = Camera.CFrame.Position
+    local myTeam = LocalPlayer.Team
+    
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character and plr.Team ~= myTeam then
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local d = (root.Position - myPos).Magnitude
+                if d < dist and d < maxDistance then
+                    closest = root
+                    dist = d
+                end
+            end
+        end
+    end
+    target = closest
+end)
+
+-- True Silent Aim (시선 무관)
+local function getTargetPos()
+    if not target then return nil end
+    local head = target.Parent:FindFirstChild("Head") or target
+    return head.Position + Vector3.new(0, 0.4, 0)
+end
+
+-- Namecall Hook (진짜 Silent Aim + Wallbang)
+pcall(function()
+    local mt = getrawmetatable(game)
+    setreadonly(mt, false)
+    local oldNamecall = mt.__namecall
+    
+    mt.__namecall = newcclosure(function(self, ...)
+        local args = {...}
+        local method = getnamecallmethod()
+        local name = tostring(self.Name):lower()
+        
+        if (silentAim or wallbang) and method == "FireServer" and (name:find("bullet") or name:find("shoot") or name:find("fire") or name:find("gun")) then
+            local targetPos = getTargetPos()
+            if targetPos then
+                -- 총알 방향 강제 (시선 무관)
+                if typeof(args[1]) == "Vector3" then
+                    args[1] = (targetPos - Camera.CFrame.Position).Unit * 1000
+                end
+            end
+        end
+        return oldNamecall(self, unpack(args))
+    end)
+    setreadonly(mt, true)
+end)
+
+print("✅ Rivals Keyhook v3.0 - True Silent Aim 로드됨")
+updateUI()
